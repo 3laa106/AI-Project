@@ -60,7 +60,7 @@ dfs(Grid, Rows, Cols, X, Y, Visited, Path, CurrentDeliveries, TotalPs, TotalDeli
         nth0(Y, Grid, Row),
         nth0(X, Row, Cell),
         Cell \= 'O',
-        \+ memberchk((X,Y), Path),
+        \+ member((X,Y), Path),
         append(Path, [(X,Y)], NewPath),
         ( Cell = 'P', \+ visited(Visited, (X,Y)) ->
             NewDeliveries is CurrentDeliveries + 1,
@@ -86,7 +86,7 @@ valid_position(Rows, Cols, X, Y) :-
 
 % --------- VISITED HELPERS ---------
 empty_visited([]).
-visited(Visited, Pos) :- memberchk(Pos, Visited).
+visited(Visited, Pos) :- member(Pos, Visited).
 mark_visited(Visited, Pos, [Pos|Visited]).
 
 empty_path([]).
