@@ -266,7 +266,7 @@ class AlphaBeta(SearchAlgorithm):
             return best_score
 
 
-class EvaluatorEngine:
+class ImprovedEvaluatorEngine:
     """Improved evaluator that better detects and prioritizes strategic patterns"""
     
     def __init__(self, player_num):
