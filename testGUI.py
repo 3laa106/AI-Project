@@ -26,6 +26,7 @@ class Gomoku:
         
         if self.check_win(row, col):
             self.game_over = True
+            print(f"xddmors {self.current_player} {self.game_over}")
             self.winner = self.current_player
         elif self.is_board_full():
             self.game_over = True
@@ -265,8 +266,8 @@ class GomokuGUI:
         self.ai_algorithm = "alphabeta"
         
         # Colors and styles
-        self.bg_color = "#f0d9b5"
-        self.line_color = "#000000"
+        self.bg_color = "#EBC69E"
+        self.line_color = "#93776C"
         self.black_stone_color = "#2c2c2c"
         self.white_stone_color = "#f9f9f9"
         
@@ -297,20 +298,23 @@ class GomokuGUI:
             self.game.game_over or self.ai_thinking):
             return
         
-        col = int((event.x - self.board_offset_x) // self.cell_size)
-        row = int((event.y - self.board_offset_y) // self.cell_size)
+        col = int((event.x - self.board_offset_x + (0.5 * self.cell_size)) // self.cell_size)
+        row = int((event.y - self.board_offset_y + (0.5 * self.cell_size)) // self.cell_size)
         
         if 0 <= row < self.board_size and 0 <= col < self.board_size and self.game.board[row][col] == 0:
             self.highlight_cell(row, col)
+        else:
+            self.canvas.delete(self.highlight)
+            
 
     def highlight_cell(self, row, col):
         """Show visual feedback when hovering over a cell"""
         if self.highlight:
             self.canvas.delete(self.highlight)
         
-        x = self.board_offset_x + col * self.cell_size
-        y = self.board_offset_y + row * self.cell_size
-        stone_size = int(self.cell_size * 0.4)  # Smaller preview stone
+        x = self.board_offset_x + col * self.cell_size - (0.5 * self.cell_size)
+        y = self.board_offset_y + row * self.cell_size - (0.5 * self.cell_size)
+        stone_size = int(self.cell_size * 0.6) 
         
         if self.game.current_player == 1:  # Black
             self.highlight = self.canvas.create_oval(
@@ -350,24 +354,11 @@ class GomokuGUI:
         control_frame = tk.Frame(self.root)
         control_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        self.new_game_btn = tk.Button(
-            control_frame, text="New Game", command=self.new_game,
-            bg="#4a7a8c", fg="white", font=("Arial", 10, "bold")
-        )
-        self.new_game_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.game_mode_btn = tk.Button(
-            control_frame, text="Switch to AI vs AI", 
-            command=self.toggle_game_mode,
-            bg="#3a5a6c", fg="white", font=("Arial", 10)
-        )
-        self.game_mode_btn.pack(side=tk.LEFT, padx=5)
-        
         self.player_indicator = tk.Label(
             control_frame, text="Current: Black (●)", 
             font=("Arial", 10, "bold"), fg="black"
         )
-        self.player_indicator.pack(side=tk.RIGHT, padx=5)
+        self.player_indicator.pack(anchor=tk.CENTER)
     
     def create_board(self):
         self.board_frame = tk.Frame(self.root)
@@ -378,12 +369,6 @@ class GomokuGUI:
             highlightthickness=0, borderwidth=0
         )
         
-        self.v_scroll = ttk.Scrollbar(self.board_frame, orient="vertical", command=self.canvas.yview)
-        self.h_scroll = ttk.Scrollbar(self.board_frame, orient="horizontal", command=self.canvas.xview)
-        self.canvas.configure(yscrollcommand=self.v_scroll.set, xscrollcommand=self.h_scroll.set)
-        
-        self.v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
         self.canvas.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
         
         self.canvas.bind("<Configure>", self.draw_board)
@@ -414,15 +399,15 @@ class GomokuGUI:
         img = Image.new("RGBA", (size*2, size*2), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        shadow_offset = size // 10
-        draw.ellipse(
-            [(shadow_offset, shadow_offset), 
-             (size*2 - shadow_offset, size*2 - shadow_offset)],
-            fill="#00000044"
-        )
+        # shadow_offset = size // 10
+        # draw.ellipse(
+        #     [(shadow_offset, shadow_offset), 
+        #      (size*2 - shadow_offset, size*2 - shadow_offset)],
+        #     fill="#52BDFFFF"
+        # )
         
         draw.ellipse(
-            [(0, 0), (size*2 - shadow_offset, size*2 - shadow_offset)],
+            [(0, 0), (size*2, size*2)],
             fill=color
         )
         
@@ -431,7 +416,7 @@ class GomokuGUI:
             draw.ellipse(
                 [(size//2, size//2), 
                  (size//2 + highlight_size, size//2 + highlight_size)],
-                fill="#ffffff88"
+                fill="#322A2888"
             )
         
         return ImageTk.PhotoImage(img.resize((size, size), Image.LANCZOS))
@@ -487,8 +472,8 @@ class GomokuGUI:
         for i in range(self.board_size):
             for j in range(self.board_size):
                 if self.game.board[i][j] != 0:
-                    x = self.board_offset_x + j * self.cell_size
-                    y = self.board_offset_y + i * self.cell_size
+                    x = self.board_offset_x + j * self.cell_size 
+                    y = self.board_offset_y + i * self.cell_size 
                     
                     if self.last_move and self.last_move == (i, j):
                         stone_type = f"last_{'black' if self.game.board[i][j] == 1 else 'white'}"
@@ -501,7 +486,7 @@ class GomokuGUI:
                     self.canvas.create_image(
                         x, y,
                         image=self.stone_images[stone_type],
-                        anchor=tk.NW, tags=f"stone_{i}_{j}"
+                        tags=f"stone_{i}_{j}"
                     )
         
         self.canvas.configure(scrollregion=(
@@ -519,8 +504,8 @@ class GomokuGUI:
             return
         
         # Precise cell calculation using floor division
-        col = int((event.x - self.board_offset_x) // self.cell_size)
-        row = int((event.y - self.board_offset_y) // self.cell_size)
+        col = int((event.x - self.board_offset_x + (0.5 * self.cell_size)) // self.cell_size)
+        row = int((event.y - self.board_offset_y + (0.5 * self.cell_size)) // self.cell_size)
         
         # Ensure we're within bounds and cell is empty
         if 0 <= row < self.board_size and 0 <= col < self.board_size and self.game.board[row][col] == 0:
@@ -532,41 +517,10 @@ class GomokuGUI:
             if self.game.make_move(row, col):
                 self.last_move = (row, col)
                 self.animate_stone(row, col)
-                
+
+                self.root.after(200, self.update_ui)
                 if not self.game.game_over and self.game_mode == "human_vs_ai":
                     self.root.after(500, self.ai_move)
-    def ai_move(self):
-        if self.game.game_over or self.game.current_player == self.human_player:
-            return
-        
-        self.ai_thinking = True
-        self.status_bar.config(text="AI is thinking...")
-        self.update_ui()
-        
-        def run_ai():
-            ai = AIPlayer(
-                self.game.current_player,
-                self.ai_algorithm,
-                self.ai_depth
-            )
-            row, col = ai.get_move(self.game)
-            return row, col
-        
-        def on_ai_complete(result):
-            row, col = result
-            if self.game.make_move(row, col):
-                self.last_move = (row, col)
-                self.animate_stone(row, col)
-            
-            self.ai_thinking = False
-            self.update_ui()
-        
-        import threading
-        def ai_worker():
-            result = run_ai()
-            self.root.after(0, lambda: on_ai_complete(result))
-        
-        threading.Thread(target=ai_worker, daemon=True).start()
     
     def animate_stone(self, row, col):
         if not hasattr(self, 'cell_size') or self.cell_size == 0:
@@ -574,8 +528,8 @@ class GomokuGUI:
         
         self.animation_in_progress = True
         stone_size = int(self.cell_size * 0.9)
-        x = self.board_offset_x + col * self.cell_size
-        y = self.board_offset_y + row * self.cell_size
+        x = self.board_offset_x + col * self.cell_size - (0.5 * self.cell_size)
+        y = self.board_offset_y + row * self.cell_size - (0.5 * self.cell_size)
         
         temp_stone = self.canvas.create_oval(
             x + stone_size//2 - 5, y + stone_size//2 - 5,
