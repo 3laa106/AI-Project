@@ -1,78 +1,89 @@
 import numpy as np
 import sys
+from abc import ABC, abstractmethod
 
 
-class Gomoku:
+class GameEngine:
     def __init__(self):
         self.size = 15
         self.board = np.zeros((self.size, self.size), dtype=np.int8)
-        self.current_player = 1
-        self.game_over = False
+        self.currentPlayer = 1
+        self.gameOver = False
         self.winner = None
         self.frontier = set()
         self.frontier.add((self.size // 2, self.size // 2))
-        self.move_history = []
 
     def reset(self):
         self.board = np.zeros((self.size, self.size), dtype=np.int8)
-        self.current_player = 1
-        self.game_over = False
+        self.currentPlayer = 1
+        self.gameOver = False
         self.winner = None
         self.frontier = set()
         self.frontier.add((self.size // 2, self.size // 2))
-        self.move_history = []
 
-    def make_move(self, row, col):
-        if self.game_over or not self.is_valid_move(row, col):
+    def makeMove(self, row, col):
+        if self.gameOver or not self.isValidMove(row, col):
             return False
 
-        self.move_history.append({
-            'position': (row, col),
-            'player': self.current_player,
-            'frontier_before': self.frontier.copy(),
-            'game_over': self.game_over,
-            'winner': self.winner
-        })
-
-        self.board[row, col] = self.current_player
+        self.board[row, col] = self.currentPlayer
         self.frontier.discard((row, col))
-        
+
         for dx in [-1, 0, 1]:
             for dy in [-1, 0, 1]:
                 if dx == 0 and dy == 0:
                     continue
                 nx, ny = row + dx, col + dy
-                if 0 <= nx < self.size and 0 <= ny < self.size and self.board[nx, ny] == 0:
+                if self.isValidMove(nx, ny):
                     self.frontier.add((nx, ny))
 
-        if self.check_win(row, col):
-            self.game_over = True
-            self.winner = self.current_player
-        elif np.count_nonzero(self.board) == self.size * self.size:
-            self.game_over = True
+        if self.checkWin(row, col):
+            self.gameOver = True
+            self.winner = self.currentPlayer
+        elif self.isBoardFull():
+            self.gameOver = True
         else:
-            self.current_player = 3 - self.current_player
+            self.currentPlayer = 3 - self.currentPlayer
 
         return True
 
-    def undo_move(self):
-        if not self.move_history:
+    def undoTest(self, row, col, isApplied):
+        if not isApplied:
             return False
-            
-        last_move = self.move_history.pop()
-        row, col = last_move['position']
+
+        if self.checkWin(row, col):
+            self.gameOver = False
+            self.winner = None
+        elif np.count_nonzero(self.board) == self.size * self.size:
+            self.gameOver = None
+        else:
+            self.currentPlayer = 3 - self.currentPlayer
+
         self.board[row, col] = 0
-        self.current_player = last_move['player']
-        self.frontier = last_move['frontier_before']
-        self.game_over = last_move['game_over']
-        self.winner = last_move['winner']
+        self.frontier.add((row, col))
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = row + dx, col + dy
+                if self.hasNoOccupiedNeighbors(nx, ny):
+                    self.frontier.discard((nx, ny))
+
         return True
 
-    def is_valid_move(self, row, col):
-        return (0 <= row < self.size and 0 <= col < self.size
-                and self.board[row, col] == 0)
+    def isValidMove(self, row, col):
+        return (0 <= row < self.size and 0 <= col < self.size and self.board[row, col] == 0)
 
-    def check_win(self, row, col):
+    def hasNoOccupiedNeighbors(self, row, col):
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = row + dx, col + dy
+                if 0 <= nx < self.size and 0 <= ny < self.size and self.board[nx, ny] != 0:
+                    return False
+        return True
+
+    def checkWin(self, row, col):
         player = self.board[row, col]
         directions = [
             [(0, 1), (0, -1)],
@@ -81,27 +92,23 @@ class Gomoku:
             [(1, -1), (-1, 1)]
         ]
 
-        for direction_pair in directions:
+        for directionPair in directions:
             count = 1
-
-            for dx, dy in direction_pair:
+            for dx, dy in directionPair:
                 x, y = row + dx, col + dy
                 while 0 <= x < self.size and 0 <= y < self.size and self.board[x, y] == player:
                     count += 1
                     x += dx
                     y += dy
-
             if count >= 5:
                 return True
-
         return False
 
-    def is_board_full(self):
+    def isBoardFull(self):
         return np.count_nonzero(self.board) == self.size * self.size
 
-    def print_board(self):
+    def printBoard(self):
         print("   " + "".join(f"{i:<3}" for i in range(self.size)))
-
         for i in range(self.size):
             print(f"{i:<2} ", end="")
             for j in range(self.size):
@@ -115,305 +122,347 @@ class Gomoku:
             print()
         print()
 
-    def get_state(self):
-        return {
-            'board': self.board.copy(),
-            'current_player': self.current_player,
-            'game_over': self.game_over,
-            'winner': self.winner,
-            'frontier': self.frontier.copy()
-        }
 
-    def set_state(self, state):
-        self.board = state['board'].copy()
-        self.current_player = state['current_player']
-        self.game_over = state['game_over']
-        self.winner = state['winner']
-        self.frontier = state['frontier'].copy()
-
-
-class AIPlayer:
-    def __init__(self, player_num, algorithm='minimax', depth=3):
-        self.player_num = player_num
-        self.algorithm = algorithm
+class SearchAlgorithm(ABC):
+    def __init__(self, playerNum, depth):
+        self.playerNum = playerNum
         self.depth = depth
+        self.evaluator = EvaluatorEngine(playerNum)
 
-    def get_move(self, game):
-        if self.algorithm == 'minimax':
-            return self.minimax_move(game)
-        elif self.algorithm == 'alphabeta':
-            return self.alphabeta_move(game)
-        else:
-            raise ValueError("Unknown algorithm")
+    @abstractmethod
+    def name(self):
+        pass
 
-    def minimax_move(self, game):
-        best_score = -float('inf')
-        best_move = None
+    @abstractmethod
+    def search(self, game):
+        pass
 
-        for move in self.get_possible_moves(game):
-            state_before = game.get_state()
-            game.make_move(*move)
+    def getPossibleMoves(self, game):
+        return game.frontier.copy()
+
+class Minimax(SearchAlgorithm):
+    def name(self):
+        return "Minimax"
+
+    def search(self, game):
+        bestScore = -float('inf')
+        bestMove = None
+
+        for move in self.getPossibleMoves(game):
+            isApplied = game.makeMove(*move)
             score = self.minimax(game, self.depth - 1, False)
-            game.set_state(state_before)
-            if score > best_score:
-                best_score = score
-                best_move = move
+            game.undoTest(*move, isApplied)
 
-        return best_move
+            if score > bestScore:
+                bestScore = score
+                bestMove = move
 
-    def minimax(self, game, depth, is_maximizing):
-        if depth == 0 or game.game_over:
-            return self.evaluate(game)
+        return bestMove
 
-        if is_maximizing:
-            best_score = -float('inf')
-            for move in self.get_possible_moves(game):
-                state_before = game.get_state()
-                game.make_move(*move)
+    def minimax(self, game, depth, isMaximizing):
+        if depth == 0 or game.gameOver:
+            return self.evaluator.evaluate(game, depth + 1)
+
+        if isMaximizing:
+            bestScore = -float('inf')
+            for move in self.getPossibleMoves(game):
+                isApplied = game.makeMove(*move)
                 score = self.minimax(game, depth - 1, False)
-                game.set_state(state_before)
-                best_score = max(best_score, score)
-            return best_score
+                game.undoTest(*move, isApplied)
+                bestScore = max(bestScore, score)
+            return bestScore
         else:
-            best_score = float('inf')
-            for move in self.get_possible_moves(game):
-                state_before = game.get_state()
-                game.make_move(*move)
+            bestScore = float('inf')
+            for move in self.getPossibleMoves(game):
+                isApplied = game.makeMove(*move)
                 score = self.minimax(game, depth - 1, True)
-                game.set_state(state_before)
-                best_score = min(best_score, score)
-            return best_score
+                game.undoTest(*move, isApplied)
+                bestScore = min(bestScore, score)
+            return bestScore
 
-    def alphabeta_move(self, game):
-        best_score = -float('inf')
-        best_move = None
+
+class AlphaBeta(SearchAlgorithm):
+    def name(self):
+        return "Alphabeta"
+
+    def search(self, game):
+        bestScore = -float('inf')
+        bestMove = None
         alpha = -float('inf')
         beta = float('inf')
 
-        for move in self.get_possible_moves(game):
-            state_before = game.get_state()
-            game.make_move(*move)
+        for move in self.getPossibleMoves(game):
+            isApplied = game.makeMove(*move)
             score = self.alphabeta(game, self.depth - 1, False, alpha, beta)
-            game.set_state(state_before)
-            if score > best_score:
-                best_score = score
-                best_move = move
-            alpha = max(alpha, best_score)
+            game.undoTest(*move, isApplied)
+
+            if score > bestScore:
+                bestScore = score
+                bestMove = move
+            alpha = max(alpha, bestScore)
             if beta <= alpha:
                 break
 
-        return best_move
+        return bestMove
 
-    def alphabeta(self, game, depth, is_maximizing, alpha, beta):
-        if depth == 0 or game.game_over:
-            return self.evaluate(game)
+    def alphabeta(self, game, depth, isMaximizing, alpha, beta):
+        if depth == 0 or game.gameOver:
+            return self.evaluator.evaluate(game, depth + 1)
 
-        if is_maximizing:
-            best_score = -float('inf')
-            for move in self.get_possible_moves(game):
-                state_before = game.get_state()
-                game.make_move(*move)
+        if isMaximizing:
+            bestScore = -float('inf')
+            for move in self.getPossibleMoves(game):
+                isApplied = game.makeMove(*move)
                 score = self.alphabeta(game, depth - 1, False, alpha, beta)
-                game.set_state(state_before)
-                best_score = max(best_score, score)
-                alpha = max(alpha, best_score)
+                game.undoTest(*move, isApplied)
+                bestScore = max(bestScore, score)
+                alpha = max(alpha, bestScore)
                 if beta <= alpha:
                     break
-            return best_score
+            return bestScore
         else:
-            best_score = float('inf')
-            for move in self.get_possible_moves(game):
-                state_before = game.get_state()
-                game.make_move(*move)
+            bestScore = float('inf')
+            for move in self.getPossibleMoves(game):
+                isApplied = game.makeMove(*move)
                 score = self.alphabeta(game, depth - 1, True, alpha, beta)
-                game.set_state(state_before)
-                best_score = min(best_score, score)
-                beta = min(beta, best_score)
+                game.undoTest(*move, isApplied)
+                bestScore = min(bestScore, score)
+                beta = min(beta, bestScore)
                 if beta <= alpha:
                     break
-            return best_score
+            return bestScore
 
-    def get_possible_moves(self, game):
-        return game.frontier.copy()
 
-    def evaluate(self, game):
-        if game.game_over:
-            if game.winner == self.player_num:
-                return 100000
+class EvaluatorEngine:
+    def __init__(self, playerNum):
+        self.playerNum = playerNum
+        self.patternScores = {
+            "FIVE": 100000,
+            "OPEN_FOUR": 10000,
+            "FOUR": 5000,
+            "OPEN_THREE": 1000,
+            "THREE": 500,
+            "OPEN_TWO": 100,
+            "TWO": 50
+        }
+
+    def evaluate(self, game, depth):
+        if game.gameOver:
+            if game.winner == self.playerNum:
+                return 100000 * depth
             elif game.winner is not None:
-                return -100000
+                return -100000 * depth
             else:
                 return 0
 
-        score = 0
-        directions = [
-            (0, 1),
-            (1, 0),
-            (1, 1),
-            (1, -1)
-        ]
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
 
-        my_pieces = np.where(game.board == self.player_num)
-        opponent_pieces = np.where(game.board == 3 - self.player_num)
-        
-        for i, j in zip(my_pieces[0], my_pieces[1]):
-            for di, dj in directions:
-                score += self.evaluate_direction(game, i, j, di, dj, self.player_num)
-                
-        for i, j in zip(opponent_pieces[0], opponent_pieces[1]):
-            for di, dj in directions:
-                score -= self.evaluate_direction(game, i, j, di, dj, 3 - self.player_num)
+        myScore = 0
+        opponentScore = 0
 
-        return score
+        for row in range(game.size):
+            for col in range(game.size):
+                if game.board[row, col] == self.playerNum:
+                    for dr, dc in directions:
+                        pattern = self.getPattern(game, row, col, dr, dc, self.playerNum)
+                        myScore += self.scorePattern(pattern) * depth
 
-    def evaluate_direction(self, game, row, col, di, dj, player):
-        count = 0
-        empty = 0
-        
-        for step in range(1, 5):
-            r, c = row + di * step, col + dj * step
-            if 0 <= r < game.size and 0 <= c < game.size:
-                if game.board[r, c] == player:
-                    count += 1
-                elif game.board[r, c] == 0:
-                    empty += 1
+                elif game.board[row, col] == 3 - self.playerNum:
+                    for dr, dc in directions:
+                        pattern = self.getPattern(game, row, col, dr, dc, 3 - self.playerNum)
+                        opponentScore += self.scorePattern(pattern) * depth
+
+        return myScore - opponentScore * 1.1
+
+    def getPattern(self, game, row, col, dr, dc, player):
+        count = 1
+        r, c = row + dr, col + dc
+        while (0 <= r < game.size and 0 <= c < game.size and game.board[r, c] == player):
+            count += 1
+            r += dr
+            c += dc
+
+        openEnds = 0
+
+        if (0 <= r < game.size and 0 <= c < game.size and game.board[r, c] == 0):
+            openEnds += 1
+
+        startR, startC = row - dr, col - dc
+        if (0 <= startR < game.size and 0 <= startC < game.size and game.board[startR, startC] == 0):
+            openEnds += 1
+
+        hasThreat = (count == 4 and openEnds >= 1)
+
+        return (count, openEnds, hasThreat)
+
+    def scorePattern(self, pattern):
+        count, openEnds, hasThreat = pattern
+
+        if count >= 5:
+            return self.patternScores["FIVE"]
+        elif count == 4:
+            if openEnds == 2:
+                return self.patternScores["OPEN_FOUR"]
+            elif openEnds == 1:
+                return self.patternScores["FOUR"]
+        elif count == 3:
+            if openEnds == 2:
+                return self.patternScores["OPEN_THREE"]
+            elif openEnds == 1:
+                return self.patternScores["THREE"]
+        elif count == 2:
+            if openEnds == 2:
+                return self.patternScores["OPEN_TWO"]
+            elif openEnds == 1:
+                return self.patternScores["TWO"]
+
+        return count
+
+
+class AIPlayer:
+    def __init__(self, playerNum, algorithm, depth=3):
+        self.playerNum = playerNum
+        self.depth = depth
+        self.algorithm = algorithm
+
+    def getMove(self, game):
+        return self.algorithm.search(game)
+
+
+class GameMode(ABC):
+    def __init__(self, game):
+        self.game = game
+
+    @abstractmethod
+    def play(self):
+        pass
+
+
+class HumanVsAI(GameMode):
+    def __init__(self, game, aiAlgorithm, aiDepth=3):
+        super().__init__(game)
+        self.ai = AIPlayer(2, aiAlgorithm, aiDepth)
+
+    def play(self):
+        print("Human (●) vs AI (○) on 15x15 board")
+        print("Enter your moves as 'row col' (e.g., '7 7' for center)")
+        print("Type 'exit' to quit\n")
+
+        while not self.game.gameOver:
+            self.game.printBoard()
+
+            if self.game.currentPlayer == 1:
+                self.handleHumanMove()
+            else:
+                self.handleAiMove()
+
+        self.displayResult()
+
+    def handleHumanMove(self):
+        while True:
+            move = input("Your move (row col): ").strip()
+            if move.lower() == 'exit':
+                print("Game exited.")
+                sys.exit()
+
+            try:
+                row, col = map(int, move.split())
+                if self.game.makeMove(row, col):
                     break
                 else:
-                    break
-            else:
-                break
+                    print("Invalid move. Try again.")
+            except:
+                print("Invalid input. Please enter two numbers separated by space.")
 
-        for step in range(1, 5):
-            r, c = row - di * step, col - dj * step
-            if 0 <= r < game.size and 0 <= c < game.size:
-                if game.board[r, c] == player:
-                    count += 1
-                elif game.board[r, c] == 0:
-                    empty += 1
-                    break
-                else:
-                    break
-            else:
-                break
-
-        total = count + 1
-
-        if total >= 5:
-            return 10000
-        elif total == 4 and empty >= 1:
-            return 1000
-        elif total == 4:
-            return 500
-        elif total == 3 and empty >= 2:
-            return 200
-        elif total == 3 and empty >= 1:
-            return 100
-        elif total == 2 and empty >= 2:
-            return 10
-        else:
-            return 1
-
-
-def human_vs_ai(ai_algorithm='minimax', ai_depth=3):
-    game = Gomoku()
-    ai = AIPlayer(2, ai_algorithm, ai_depth)
-
-    print("Human (●) vs AI (○) on 15x15 board")
-    print("Enter your moves as 'row col' (e.g., '7 7' for center)")
-    print("Type 'exit' to quit\n")
-
-    while not game.game_over:
-        game.print_board()
-
-        if game.current_player == 1:
-            while True:
-                move = input("Your move (row col): ").strip()
-                if move.lower() == 'exit':
-                    print("Game exited.")
-                    return
-
-                try:
-                    row, col = map(int, move.split())
-                    if game.make_move(row, col):
-                        break
-                    else:
-                        print("Invalid move. Try again.")
-                except:
-                    print("Invalid input. Please enter two numbers separated by space.")
-        else:
-            print("AI is thinking...")
-            row, col = ai.get_move(game)
-            game.make_move(row, col)
-            print(f"AI plays: {row} {col}")
-
-    game.print_board()
-    if game.winner == 1:
-        print("Congratulations! You won!")
-    elif game.winner == 2:
-        print("AI wins!")
-    else:
-        print("It's a draw!")
-
-
-def ai_vs_ai(ai1_algorithm='minimax', ai2_algorithm='alphabeta', depth=3):
-    game = Gomoku()
-    ai1 = AIPlayer(1, ai1_algorithm, depth)
-    ai2 = AIPlayer(2, ai2_algorithm, depth)
-
-    print(f"AI ({ai1_algorithm}) (●) vs AI ({ai2_algorithm}) (○) on 15x15 board")
-    print("Press Enter to continue each move, or type 'exit' to quit\n")
-
-    while not game.game_over:
-        game.print_board()
-
-        user_input = input("Press Enter for next move or 'exit' to quit: ").strip()
-        if user_input.lower() == 'exit':
-            print("Game exited.")
-            return
-
-        if game.current_player == 1:
-            print(f"AI ({ai1_algorithm}) is thinking...")
-            row, col = ai1.get_move(game)
-        else:
-            print(f"AI ({ai2_algorithm}) is thinking...")
-            row, col = ai2.get_move(game)
-
-        game.make_move(row, col)
+    def handleAiMove(self):
+        print("AI is thinking...")
+        row, col = self.ai.getMove(self.game)
+        self.game.makeMove(row, col)
         print(f"AI plays: {row} {col}")
 
-    game.print_board()
-    if game.winner == 1:
-        print(f"AI ({ai1_algorithm}) wins!")
-    elif game.winner == 2:
-        print(f"AI ({ai2_algorithm}) wins!")
-    else:
-        print("It's a draw!")
+    def displayResult(self):
+        self.game.printBoard()
+        if self.game.winner == 1:
+            print("Congratulations! You won!")
+        elif self.game.winner == 2:
+            print("AI wins!")
+        else:
+            print("It's a draw!")
+
+
+class AIvsAI(GameMode):
+    def __init__(self, game, ai1Algorithm, ai2Algorithm, depth = 3):
+        super().__init__(game)
+        self.ai1 = AIPlayer(1, ai1Algorithm, depth)
+        self.ai2 = AIPlayer(2, ai2Algorithm, depth)
+
+    def play(self):
+        print(f"AI ({self.ai1.algorithm.name()}) (●) vs AI ({self.ai2.algorithm.name()}) (○) on 15x15 board")
+        print("Press Enter to continue each move, or type 'exit' to quit\n")
+
+        while not self.game.gameOver:
+            self.game.printBoard()
+            if not self.handleUserInput():
+                return
+
+            if self.game.currentPlayer == 1:
+                self.handleAiMove(self.ai1, self.ai1.algorithm.name())
+            else:
+                self.handleAiMove(self.ai2, self.ai2.algorithm.name())
+
+        self.displayResult()
+
+    def handleUserInput(self):
+        userInput = input("Press Enter for next move or 'exit' to quit: ").strip()
+        if userInput.lower() == 'exit':
+            print("Game exited.")
+            return False
+        return True
+
+    def handleAiMove(self, ai, aiName):
+        print(f"AI ({aiName}) is thinking...")
+        row, col = ai.getMove(self.game)
+        self.game.makeMove(row, col)
+        print(f"AI plays: {row} {col}")
+
+    def displayResult(self):
+        self.game.printBoard()
+        if self.game.winner == 1:
+            print(f"AI ({self.ai1.algorithm.name()}) wins!")
+        elif self.game.winner == 2:
+            print(f"AI ({self.ai2.algorithm.name()}) wins!")
+        else:
+            print("It's a draw!")
 
 
 def main():
     print("Gomoku (Five in a Row) Game Solver")
     print("1. Human vs AI (Minimax)")
-    print("2. Human vs AI (Alpha-Beta)")
-    print("3. AI (Minimax) vs AI (Alpha-Beta)")
-    print("4. Exit")
+    print("2. AI (Minimax) vs AI (Alpha-Beta)")
+    print("3. Exit")
 
     while True:
-        choice = input("\nSelect mode (1-4): ").strip()
+        choice = input("\nSelect mode (1-3): ").strip()
 
         if choice == '1':
             depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
-            human_vs_ai('minimax', min(max(depth, 1), 5))
+            depth = min(max(depth, 1), 5)
+            game = GameEngine()
+            gameMode = HumanVsAI(game, Minimax(2, depth), depth)
+            gameMode.play()
+
         elif choice == '2':
             depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
-            human_vs_ai('alphabeta', min(max(depth, 1), 5))
+            depth = min(max(depth, 1), 5)
+            game = GameEngine()
+            gameMode = AIvsAI(game, Minimax(1, depth), AlphaBeta(2, depth), depth)
+            gameMode.play()
+
         elif choice == '3':
-            depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
-            ai_vs_ai('minimax', 'alphabeta', min(max(depth, 1), 5))
-        elif choice == '4':
             print("Goodbye!")
             sys.exit()
         else:
-            print("Invalid choice. Please enter 1-4.")
+            print("Invalid choice. Please enter 1-3.")
 
 
 if __name__ == "__main__":
