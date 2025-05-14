@@ -132,7 +132,7 @@ class SearchAlgorithm(ABC):
     def __init__(self, player_num, depth):
         self.player_num = player_num
         self.depth = depth
-        self.evaluator = EvaluatorEngine(player_num)
+        self.evaluator = ImprovedEvaluatorEngine(player_num)
 
     @abstractmethod
     def name(self):
@@ -143,7 +143,30 @@ class SearchAlgorithm(ABC):
         pass
 
     def get_possible_moves(self, game):
-        return game.frontier.copy()
+        # Prioritize moves near existing pieces
+        frontier_list = list(game.frontier)
+        
+        # Sort moves by importance (closer to existing pieces first)
+        sorted_moves = self.sort_moves_by_importance(game, frontier_list)
+        
+        # For deeper searches, limit the number of moves to consider
+        if len(sorted_moves) > 15 and self.depth > 2:
+            sorted_moves = sorted_moves[:15]
+            
+        return sorted_moves
+        
+    def sort_moves_by_importance(self, game, moves):
+        """Sort moves by their potential impact on the game."""
+        move_scores = []
+        
+        for move in moves:
+            # Quick evaluation of move importance
+            score = self.evaluator.evaluate_move_importance(game, move[0], move[1])
+            move_scores.append((move, score))
+            
+        # Sort by score in descending order
+        move_scores.sort(key=lambda x: x[1], reverse=True)
+        return [move for move, _ in move_scores]
 
 
 class Minimax(SearchAlgorithm):
@@ -190,7 +213,6 @@ class Minimax(SearchAlgorithm):
 
 
 class AlphaBeta(SearchAlgorithm):
-
     def name(self):
         return "Alphabeta"
 
@@ -245,10 +267,23 @@ class AlphaBeta(SearchAlgorithm):
 
 
 class EvaluatorEngine:
+    """Improved evaluator that better detects and prioritizes strategic patterns"""
+    
     def __init__(self, player_num):
         self.player_num = player_num
+        # Pattern scores (relative values)
+        self.pattern_scores = {
+            "FIVE": 100000,      # Five in a row (win)
+            "OPEN_FOUR": 10000,  # Four with both ends open (guaranteed win)
+            "FOUR": 5000,        # Four with one end open
+            "OPEN_THREE": 1000,  # Three with both ends open
+            "THREE": 500,        # Three with one end open
+            "OPEN_TWO": 100,     # Two with both ends open
+            "TWO": 50            # Two with one end open
+        }
 
     def evaluate(self, game):
+        """Evaluate the current board state from the perspective of self.player_num"""
         if game.game_over:
             if game.winner == self.player_num:
                 return 100000
@@ -257,73 +292,132 @@ class EvaluatorEngine:
             else:
                 return 0
 
-        score = 0
-        directions = [
-            (0, 1),
-            (1, 0),
-            (1, 1),
-            (1, -1)
-        ]
-
-        my_pieces = np.where(game.board == self.player_num)
-        opponent_pieces = np.where(game.board == 3 - self.player_num)
+        # Direction vectors
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
         
-        for i, j in zip(my_pieces[0], my_pieces[1]):
-            for di, dj in directions:
-                score += self.evaluate_direction(game, i, j, di, dj, self.player_num)
+        # Initialize scores
+        my_score = 0
+        opponent_score = 0
+        
+        # Scan the entire board for patterns
+        for row in range(game.size):
+            for col in range(game.size):
+                if game.board[row, col] == self.player_num:
+                    # Evaluate patterns for my pieces
+                    for dr, dc in directions:
+                        pattern = self.get_pattern(game, row, col, dr, dc, self.player_num)
+                        my_score += self.score_pattern(pattern)
+                        
+                elif game.board[row, col] == 3 - self.player_num:
+                    # Evaluate patterns for opponent pieces
+                    for dr, dc in directions:
+                        pattern = self.get_pattern(game, row, col, dr, dc, 3 - self.player_num)
+                        opponent_score += self.score_pattern(pattern)
+        
+        # Return the difference (positive means advantage for player_num)
+        return my_score - opponent_score * 1.1  # Slight defensive bias
+        
+    def get_pattern(self, game, row, col, dr, dc, player):
+        """
+        Get the pattern of consecutive pieces and empty spaces
+        in a given direction starting from (row, col)
+        
+        Returns a tuple (consecutive_count, num_open_ends, has_threat)
+        """
+        # Only start pattern detection from the beginning of a sequence
+        # Check if previous position is empty or out of bounds
+        prev_r, prev_c = row - dr, col - dc
+        if (0 <= prev_r < game.size and 0 <= prev_c < game.size and 
+            game.board[prev_r, prev_c] == player):
+            # This is not the start of a sequence
+            return (0, 0, False)
+            
+        # Count consecutive pieces
+        count = 1  # Start with 1 (the current piece)
+        r, c = row + dr, col + dc
+        while (0 <= r < game.size and 0 <= c < game.size and 
+               game.board[r, c] == player):
+            count += 1
+            r += dr
+            c += dc
+            
+        # Check open ends
+        open_ends = 0
+        
+        # Check if the end position is empty
+        if (0 <= r < game.size and 0 <= c < game.size and 
+            game.board[r, c] == 0):
+            open_ends += 1
+            
+        # Check if the start position (before row, col) is empty
+        start_r, start_c = row - dr, col - dc
+        if (0 <= start_r < game.size and 0 <= start_c < game.size and 
+            game.board[start_r, start_c] == 0):
+            open_ends += 1
+            
+        # Check for specific threats (like open four)
+        has_threat = (count == 4 and open_ends >= 1)
+            
+        return (count, open_ends, has_threat)
+        
+    def score_pattern(self, pattern):
+        """Score a pattern based on its strategic value"""
+        count, open_ends, has_threat = pattern
+        
+        if count >= 5:
+            return self.pattern_scores["FIVE"]
+        elif count == 4:
+            if open_ends == 2:
+                return self.pattern_scores["OPEN_FOUR"]
+            elif open_ends == 1:
+                return self.pattern_scores["FOUR"]
+        elif count == 3:
+            if open_ends == 2:
+                return self.pattern_scores["OPEN_THREE"]
+            elif open_ends == 1:
+                return self.pattern_scores["THREE"]
+        elif count == 2:
+            if open_ends == 2:
+                return self.pattern_scores["OPEN_TWO"]
+            elif open_ends == 1:
+                return self.pattern_scores["TWO"]
                 
-        for i, j in zip(opponent_pieces[0], opponent_pieces[1]):
-            for di, dj in directions:
-                score -= self.evaluate_direction(game, i, j, di, dj, 3 - self.player_num)
-
-        return score
-
-    def evaluate_direction(self, game, row, col, di, dj, player):
-        count = 0
-        empty = 0
+        return count  # Base score is just the count
         
-        for step in range(1, 5):
-            r, c = row + di * step, col + dj * step
-            if 0 <= r < game.size and 0 <= c < game.size:
-                if game.board[r, c] == player:
-                    count += 1
-                elif game.board[r, c] == 0:
-                    empty += 1
-                    break
-                else:
-                    break
-            else:
-                break
-
-        for step in range(1, 5):
-            r, c = row - di * step, col - dj * step
-            if 0 <= r < game.size and 0 <= c < game.size:
-                if game.board[r, c] == player:
-                    count += 1
-                elif game.board[r, c] == 0:
-                    empty += 1
-                    break
-                else:
-                    break
-            else:
-                break
-
-        total = count + 1
-
-        if total >= 5:
-            return 10000
-        elif total == 4 and empty >= 1:
-            return 1000
-        elif total == 4:
-            return 500
-        elif total == 3 and empty >= 2:
-            return 200
-        elif total == 3 and empty >= 1:
-            return 100
-        elif total == 2 and empty >= 2:
-            return 10
-        else:
-            return 1
+    def evaluate_move_importance(self, game, row, col):
+        """Quickly assess the importance of a potential move for move ordering"""
+        if not game.is_valid_move(row, col):
+            return -float('inf')
+            
+        # Temporarily place the piece
+        original_value = game.board[row, col]
+        
+        # Try as my piece
+        game.board[row, col] = self.player_num
+        my_score = self.quick_evaluate_position(game, row, col)
+        
+        # Try as opponent piece (defensive value)
+        game.board[row, col] = 3 - self.player_num
+        opponent_score = self.quick_evaluate_position(game, row, col)
+        
+        # Restore the board
+        game.board[row, col] = original_value
+        
+        # Combine offensive and defensive values
+        # Give slightly higher weight to defensive moves
+        return max(my_score, opponent_score * 1.2)
+        
+    def quick_evaluate_position(self, game, row, col):
+        """Quickly evaluate a position without full board scan"""
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        player = game.board[row, col]
+        total_score = 0
+        
+        for dr, dc in directions:
+            pattern = self.get_pattern(game, row, col, dr, dc, player)
+            total_score += self.score_pattern(pattern)
+            
+        return total_score
 
 
 class AIPlayer:
@@ -455,14 +549,14 @@ def main():
             depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
             depth = min(max(depth, 1), 5)
             game = GameEngine()
-            game_mode = HumanVsAI(game, Minimax(2, depth))
+            game_mode = HumanVsAI(game, Minimax(2, depth), depth)
             game_mode.play()
                 
         elif choice == '2':
             depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
             depth = min(max(depth, 1), 5)
             game = GameEngine()
-            game_mode = AIvsAI(game, Minimax(1, depth), AlphaBeta(2, depth))
+            game_mode = AIvsAI(game, Minimax(1, depth), AlphaBeta(2, depth), depth)
             game_mode.play()
                 
         elif choice == '3':
