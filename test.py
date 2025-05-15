@@ -1,8 +1,7 @@
-import numpy as np
 import sys
+import numpy as np
 import tkinter as tk
-from tkinter import messagebox, ttk
-from copy import deepcopy
+from tkinter import messagebox
 from PIL import Image, ImageTk, ImageDraw
 from abc import ABC, abstractmethod
 
@@ -327,7 +326,6 @@ class AIPlayer:
     def getMove(self, game):
         return self.algorithm.search(game)
 
-
 class GameMode(ABC):
     def __init__(self, game):
         self.game = game
@@ -438,41 +436,33 @@ class GomokuGUI:
         self.root.geometry("800x700")
         self.root.minsize(600, 600)
         
-
-        # Game configuration
         self.board_size = 15
         self.ai_depth = 3
         self.game_mode = "human_vs_ai"
-        self.ai_algorithm = AlphaBeta(2, self.ai_depth)
+        self.ai_algorithm = Minimax(1, self.ai_depth)
+        self.ai_algorithm2 = AlphaBeta(2, self.ai_depth)
 
-        # Colors and styles
-        self.bg_color = "#EBC69E"
+        self.bg_color = "#DFBD9D"
         self.line_color = "#93776C"
         self.black_stone_color = "#2c2c2c"
         self.white_stone_color = "#f9f9f9"
         
-        # Game state
         self.game = GameEngine(self.board_size)
         self.last_move = None
         self.human_player = 1
         self.ai_thinking = False
-        self.animation_in_progress = False
         
-        # Create UI
         self.create_menu()
         self.create_game_controls()
         self.create_board()
         self.create_status_bar()
         
-        # Pre-render stone images
         self.stone_images = self.create_stone_images(30)
-        self.canvas.bind("<Motion>", self.on_hover)  # Add this for hover effect
-        self.highlight = None  # Add this to track highlight object
-        # Start the game
+        self.canvas.bind("<Motion>", self.on_hover)
+        self.highlight = None
         self.update_ui()
         
     def on_hover(self, event):
-        """Show preview stone when hovering over empty cells"""
         if (self.game_mode != "human_vs_ai" or 
             self.game.currentPlayer!= self.human_player or
             self.game.gameOver or self.ai_thinking):
@@ -486,9 +476,7 @@ class GomokuGUI:
         elif not self.highlight == None:
             self.canvas.delete(self.highlight)
             
-
     def highlight_cell(self, row, col):
-        """Show visual feedback when hovering over a cell"""
         if self.highlight:
             self.canvas.delete(self.highlight)
         
@@ -496,22 +484,28 @@ class GomokuGUI:
         y = self.board_offset_y + row * self.cell_size - (0.5 * self.cell_size)
         stone_size = int(self.cell_size * 0.6) 
         
-        if self.game.currentPlayer == 1:  # Black
+        if self.game.currentPlayer == 1:
             self.highlight = self.canvas.create_oval(
                 x + self.cell_size//2 - stone_size//2,
                 y + self.cell_size//2 - stone_size//2,
                 x + self.cell_size//2 + stone_size//2,
                 y + self.cell_size//2 + stone_size//2,
-                fill="#2c2c2c", outline="", width=0, tags="hover"
+                fill="#2c2c2c",
+                outline="",
+                width=0,
+                tags="hover"
             )
-        else:  # White
+        else:
             self.highlight = self.canvas.create_oval(
                 x + self.cell_size//2 - stone_size//2,
                 y + self.cell_size//2 - stone_size//2,
                 x + self.cell_size//2 + stone_size//2,
                 y + self.cell_size//2 + stone_size//2,
-                fill="#f9f9f9", outline="", width=0, tags="hover"
-            )    
+                fill="#f9f9f9",
+                outline="",
+                width=0,
+                tags="hover"
+            )
     def create_menu(self):
         menubar = tk.Menu(self.root)
         
@@ -553,14 +547,10 @@ class GomokuGUI:
         
         self.canvas.bind("<Configure>", self.draw_board)
         self.canvas.bind("<Button-1>", self.on_click)
-        
-        self.cell_size = 0
-        self.board_offset_x = 0
-        self.board_offset_y = 0
     
     def create_status_bar(self):
         self.status_bar = tk.Label(
-            self.root, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W,
+            self.root, text="xddmors", bd=1, relief=tk.SUNKEN, anchor=tk.W,
             font=("Arial", 9), bg="#e0e0e0"
         )
         self.status_bar.pack(fill=tk.X, padx=2, pady=2)
@@ -576,19 +566,19 @@ class GomokuGUI:
         return stone_images
     
     def create_stone_image(self, size, color, highlight=False):
-        img = Image.new("RGBA", (size*2, size*2), (0, 0, 0, 0))
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
         draw.ellipse(
-            [(0, 0), (size*2, size*2)],
+            [(0, 0), (size, size)],
             fill=color
         )
         
         if highlight:
-            highlight_size = size // 3
+            highlight_size = size // 6
             draw.ellipse(
-                [(size//2, size//2), 
-                 (size//2 + highlight_size, size//2 + highlight_size)],
+                [(highlight_size, highlight_size), 
+                 (2*highlight_size, 2 * highlight_size)],
                 fill="#322A2888"
             )
         
@@ -669,66 +659,26 @@ class GomokuGUI:
         ))
     
     def on_click(self, event):
-        """Handle mouse clicks on the board with precise placement"""
         if (self.game_mode != "human_vs_ai" or 
             self.game.currentPlayer != self.human_player or
-            self.game.gameOver or self.ai_thinking or
-            self.animation_in_progress):
+            self.game.gameOver or self.ai_thinking):
             return
         
-        # Precise cell calculation using floor division
         col = int((event.x - self.board_offset_x + (0.5 * self.cell_size)) // self.cell_size)
         row = int((event.y - self.board_offset_y + (0.5 * self.cell_size)) // self.cell_size)
         
-        # Ensure we're within bounds and cell is empty
         if 0 <= row < self.board_size and 0 <= col < self.board_size and self.game.board[row][col] == 0:
-            # Remove any hover preview
             if self.highlight:
                 self.canvas.delete(self.highlight)
                 self.highlight = None
             
             if self.game.makeMove(row, col):
                 self.last_move = (row, col)
-                self.animate_stone(row, col)
 
                 self.root.after(200, self.update_ui)
                 if not self.game.gameOver and self.game_mode == "human_vs_ai":
                     self.root.after(500, self.ai_move)
 
-    def animate_stone(self, row, col):
-        if not hasattr(self, 'cell_size') or self.cell_size == 0:
-            return
-        
-        self.animation_in_progress = True
-        stone_size = int(self.cell_size * 1)
-        x = self.board_offset_x + col * self.cell_size - (0.5 * self.cell_size)
-        y = self.board_offset_y + row * self.cell_size - (0.5 * self.cell_size)
-        
-        temp_stone = self.canvas.create_oval(
-            x + stone_size//2 - 5, y + stone_size//2 - 5,
-            x + stone_size//2 + 5, y + stone_size//2 + 5,
-            fill="black" if self.game.board[row][col] == 1 else "white",
-            outline=""
-        )
-        
-        def grow_stone(step):
-            current_size = 10 + step * 4
-            if current_size >= stone_size:
-                self.canvas.delete(temp_stone)
-                self.draw_board()
-                self.animation_in_progress = False
-                return
-            
-            self.canvas.coords(
-                temp_stone,
-                x + stone_size//2 - current_size//2,
-                y + stone_size//2 - current_size//2,
-                x + stone_size//2 + current_size//2,
-                y + stone_size//2 + current_size//2
-            )
-            self.root.after(20, lambda: grow_stone(step + 1))
-        
-        grow_stone(0)
     
     def update_ui(self):
         if self.game is None:
@@ -742,8 +692,13 @@ class GomokuGUI:
             else:
                 self.player_indicator.config(text="Game ended in draw!", fg="black")
         else:
-            player_text = "Black (●)" if self.game.currentPlayer == 1 else "White (○)"
-            color = "black" if self.game.currentPlayer == 1 else "white"
+            if self.game.currentPlayer == 1:
+                player_text = "Black (●)"
+                color = "black" 
+            else:
+                player_text = "White (○)"
+                color = "white"
+
             self.player_indicator.config(text=f"Current: {player_text}", fg=color)
         
         if self.ai_thinking:
@@ -767,7 +722,6 @@ class GomokuGUI:
         self.game = GameEngine(self.board_size)
         self.last_move = None
         self.ai_thinking = False
-        self.animation_in_progress = False
         
         if self.game_mode == "ai_vs_ai":
             self.root.after(500, self.ai_vs_ai_loop)
@@ -775,73 +729,54 @@ class GomokuGUI:
         self.update_ui()
     
     def set_game_mode(self, mode):
-        """Set the game mode and properly initialize"""
         self.game_mode = mode
-        self.update_game_mode_button()
         self.new_game()
         
-        # Start AI vs AI loop if needed
         if mode == "ai_vs_ai":
             self.root.after(500, self.ai_vs_ai_loop)
 
     def ai_vs_ai_loop(self):
-        """Handle AI vs AI game loop with proper updates"""
         if self.game.gameOver or self.game_mode != "ai_vs_ai":
             return
         
         self.ai_move()
-        
-        # Only continue if still in AI vs AI mode
+
         if self.game_mode == "ai_vs_ai" and not self.game.gameOver:
             self.root.after(1000, self.ai_vs_ai_loop)
 
     def ai_move(self):
-        """Make AI move with proper UI updates"""
         if self.game.gameOver or (self.game_mode == "human_vs_ai" and self.game.currentPlayer == self.human_player):
             return
         
         self.ai_thinking = True
         self.status_bar.config(text="AI is thinking...")
         self.update_ui()
-        self.root.update()  # Force UI update
+        self.root.update()
         
-        def run_ai():
+        if self.game.currentPlayer == 1:
             ai = AIPlayer(
                 self.game.currentPlayer,
                 self.ai_algorithm,
                 self.ai_depth
             )
-            return ai.getMove(self.game)
+        else:
+            ai = AIPlayer(
+                self.game.currentPlayer,
+                self.ai_algorithm2,
+                self.ai_depth
+            )
+        result = ai.getMove(self.game)
         
         def on_ai_complete(result):
             row, col = result
             if self.game.makeMove(row, col):
                 self.last_move = (row, col)
-                self.animate_stone(row, col)
             
             self.ai_thinking = False
             self.update_ui()
         
-        # Use threading to prevent UI freeze
-        import threading
-        def ai_worker():
-            result = run_ai()
-            self.root.after(0, lambda: on_ai_complete(result))
+        self.root.after(100, lambda: on_ai_complete(result))
         
-        threading.Thread(target=ai_worker, daemon=True).start()
-        
-    def toggle_game_mode(self):
-        if self.game_mode == "human_vs_ai":
-            self.set_game_mode("ai_vs_ai")
-        else:
-            self.set_game_mode("human_vs_ai")
-    
-    def update_game_mode_button(self):
-        if self.game_mode == "human_vs_ai":
-            self.game_mode_btn.config(text="Switch to AI vs AI")
-        else:
-            self.game_mode_btn.config(text="Switch to Human vs AI")
-    
     def configure_board_size(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Configure Board Size")
@@ -888,23 +823,8 @@ class GomokuGUI:
         )
         depth_spin.grid(row=0, column=1, padx=5, pady=5)
         
-        tk.Label(dialog, text="AI Algorithm:").grid(row=1, column=0, padx=5, pady=5)
-        
-        algo_var = tk.StringVar(value=self.ai_algorithm.name())
-        algo_menu = tk.OptionMenu(
-            dialog, algo_var, "minimax", "alphabeta"
-        )
-        algo_menu.config(width=10)
-        algo_menu.grid(row=1, column=1, padx=5, pady=5)
-        
         def apply_changes():
             self.ai_depth = depth_var.get()
-            algo_name = algo_var.get()
-            if algo_name == "minimax":
-                self.ai_algorithm = Minimax(2,self.ai_depth)
-            else:
-                self.ai_algorithm = AlphaBeta(2,self.ai_depth)
-                
             dialog.destroy()
         
         tk.Button(
@@ -914,7 +834,7 @@ class GomokuGUI:
 
 def main():
     root = tk.Tk()
-    app = GomokuGUI(root)
+    GomokuGUI(root)
     root.mainloop()
     # print("Gomoku (Five in a Row) Game Solver")
     # print("1. Human vs AI (Minimax)")
@@ -927,14 +847,14 @@ def main():
     #     if choice == '1':
     #         depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
     #         depth = min(max(depth, 1), 5)
-    #         game = GameEngine()
+    #         game = GameEngine(15)
     #         gameMode = HumanVsAI(game, Minimax(2, depth), depth)
     #         gameMode.play()
 
     #     elif choice == '2':
     #         depth = int(input("Enter AI depth (1-5, higher is smarter but slower): "))
     #         depth = min(max(depth, 1), 5)
-    #         game = GameEngine()
+    #         game = GameEngine(15)
     #         gameMode = AIvsAI(game, Minimax(1, depth), AlphaBeta(2, depth), depth)
     #         gameMode.play()
 
