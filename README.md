@@ -25,8 +25,8 @@ This implementation features:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/gomoku.git
-cd gomoku
+git clone https://github.com/3laa106/AI-Project.git
+cd AI-Project
 ```
 
 2. Install the required packages:
