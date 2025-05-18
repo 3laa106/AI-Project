@@ -1,6 +1,6 @@
 # Gomoku - Five in a Row Game
 
-![Gomoku Game Screenshot](https://github.com/user-attachments/assets/6ae6873b-33e0-4f4e-8362-c9e05f4636eb)
+![Gomoku Game Screenshot](https://github.com/user-attachments/assets/a5a8f383-df1c-4626-bd56-dabebc1dab09)
 
 ## Description
 
